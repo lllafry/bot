@@ -57,16 +57,13 @@ leave_chats = True
 act = [] # [[ID, chatID, [arg]]
 users = [] # [ID, time_last_msg, num_msg, time_ban]
 
-#token = os.environ['TELEGRAM_TOKEN']
-#apihelper.CONNECT_TIMEOUT = 10
-
-bot = telebot.TeleBot(token, num_threads=1)
+bot = telebot.TeleBot(token, num_threads=3)
 
 
 def send_to_log(somelist):
     if len(somelist) == 0:
         return
-    time = datetime.now().strftime('d h Y   H:M:S')
+    time = datetime.now().strftime('%d %h %Y   %H:%M:%S')
     for x in somelist:
         db.log.insert_one({'time': time, 'msg': x})
 
