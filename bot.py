@@ -300,7 +300,7 @@ def command_admin(m):
     except:
         return
     if todo == 'give':
-        if not any(x['ID'] == ID for x in data['data']):
+        if not any(x['ID'] == ID for x in data):
             bot.send_message(m.chat.id, 'Пользователь должен быть в таблице')
         elif ID in admins:
             return
@@ -379,7 +379,7 @@ def command_deluser(m):
         if len(w_key) > 0:
             return
         for i in range(len(data)):# удаляю в основной базе
-            if data[i]['ad']['ID'] == ID:
+            if data[i]['ID'] == ID:
                 del data[i]
                 break
         for i in range(len(users)):# удаляю из добавленных по /adduser
