@@ -542,7 +542,7 @@ def forward_from_any_user(m):
         return
     if m.chat.type != 'private':
         return
-    date = time.ctime(m.forward_date)
+    date = time.ctime(m.forward_date + 3 * 3600)
     if m.forward_from.is_bot:
         from_who = 'бота' if m.forward_from.id != 669479634 else 'меня'
     else:
