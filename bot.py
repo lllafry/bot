@@ -1,4 +1,4 @@
-import os, telebot, random, io
+import os, telebot, random, io, time
 from pymongo import MongoClient
 from datetime import datetime 
 from apibot import parse_message, parse_heroism, show_find, del_find, data_index_for_key
