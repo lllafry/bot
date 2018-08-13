@@ -349,8 +349,11 @@ def command_delfind(m):
     if cmd[0] != 'find':#to find
         return
     strlist = extract_after_comm(m.text).split()
+    if len(strlist) == 0:
+        return
     if any(not x.isdigit() for x in strlist):
         bot.send_message(m.chat.id, random.choice(BAD_ANSWER))
+        return
     intlist = [int(x) for x in strlist]
     if (max(intlist) > len(cmd[2])) or (min(intlist) < 1):
         bot.send_message(m.chat.id, random.choice(BAD_ANSWER))
