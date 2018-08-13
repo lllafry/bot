@@ -1,5 +1,2 @@
 pyTelegramBotAPI
 pymongo
-datetime
-io
-random
