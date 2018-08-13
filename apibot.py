@@ -557,17 +557,17 @@ def parse_heroism(alldata, m):
     timeData = datetime.datetime.fromtimestamp(m.forward_date)
     if (timeNow - timeData).total_seconds() > 3600:
         inter['main'] = 'Предоставленные данные устарели (1 час)'
-        return alldata, inter, False
+        return False, inter
     s = m.text
     del m
     if s[:5] != 'Отряд':
-        return alldata, inter, False
+        return False, inter
     p = s[:50].find('Бойцы')
     if p == -1:
-        return alldata, inter, False
+        return False, inter
     p = s[:70].find(va)
     if p == -1:
-        return alldata, inter, False
+        return False, inter
     ticks = 0
     while s.find(va, p, p + 100) != -1:
         ticks += 1
@@ -580,29 +580,29 @@ def parse_heroism(alldata, m):
         heroism = _toint(s[p:p + 10])
 
         find = 0
-        for i in range(len(alldata['data'])):
-            if nick == alldata['data'][i]['gm']['nick']:
+        for i in range(len(alldata)):
+            if nick == alldata[i]['gm']['nick']:
                 find += 1
                 position = i
         if find == 1:
             herdic.append([nick, heroism])
         else:
             inter['msg'].append('hero error in name {} find {}'.format(nick, find))
-    for i in range(len(alldata['data'])):
+    for i in range(len(alldata)):
         is_find = False
         for y in range(len(herdic)):
-            if alldata['data'][i]['gm']['nick'] == herdic[y][0]:
+            if alldata[i]['gm']['nick'] == herdic[y][0]:
                 is_find = True
-                if alldata['data'][i]['ad']['heroism'] != herdic[y][1]:
+                if alldata[i]['ad']['heroism'] != herdic[y][1]:
                     is_change = True
-                    alldata['data'][i]['ad']['heroism'] = herdic[y][1]
+                    alldata[i]['ad']['heroism'] = herdic[y][1]
         if not is_find:
-            if alldata['data'][i]['ad']['heroism'] != 0:
+            if alldata[i]['ad']['heroism'] != 0:
                 is_change = True
-                alldata['data'][i]['ad']['heroism'] = 0
+                alldata[i]['ad']['heroism'] = 0
     if is_change:
         inter['main'] = 'Героизм обновлен.'
-    return alldata, inter, is_change
+    return is_change, inter
 
 
 def data_index_for_key(data, obj):
