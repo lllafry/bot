@@ -357,6 +357,7 @@ def command_delfind(m):
     intlist = [int(x) for x in strlist]
     if (max(intlist) > len(cmd[2])) or (min(intlist) < 1):
         bot.send_message(m.chat.id, random.choice(BAD_ANSWER))
+        return
     is_admin = True if m.from_user.id in admins else False
     
     is_change = del_find(data, cmd[1], cmd[2], intlist)
