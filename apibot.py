@@ -169,8 +169,7 @@ def _decode_equip(s):
             if result[i] == '':
                 result[i] = 'wrong'
     if inter['ticks'] > 70:
-        inter['msg'].append('Информация о ' + self_data['game']['nick'] +
-                            ' ticks: ' + str(inter['ticks']) + '\n\n' + s_orig)
+        inter['msg'].append('ticks: ' + str(inter['ticks']) + '\n\n' + s_orig)
                             
     return [dict(spear = result[0], shield = result[1], helmet = result[2],
             glove = result[3], armor = result[4], boot = result[5]),
