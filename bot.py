@@ -563,14 +563,14 @@ def all_private_data(m):
         return
         
 
-
+bot.send_message(-1001223157393, 'hi')
 while True:
     try:
-        bot.sendmessage(-1001223157393, '~запуск бота')
+        bot.send_message(-1001223157393, '~запуск бота')
         bot.polling(none_stop=True,timeout=30)
     except:
         try:
-            bot.sendmessage(-1001223157393, '~ошибка при полинге')
+            bot.send_message(-1001223157393, '~ошибка при полинге')
             bot.stop_polling()
         except:
             pass
@@ -578,7 +578,7 @@ while True:
         check = True
         while check:
             try:
-                bot.sendmessage(-1001223157393, '~перезапуск бота')
+                bot.send_message(-1001223157393, '~перезапуск бота')
                 bot.polling(none_stop=True,timeout=30)
                 check = False
             except:
