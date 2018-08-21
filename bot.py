@@ -6,9 +6,13 @@ from plot import get_plot
 from table import get_table_image
 from mongo import *
 
-token = os.environ['BOT_TOKEN']
-
-client = MongoClient(os.environ['BOT_DB'])
+from telebot import apihelper
+import config
+token = config.token
+client = MongoClient(config.db)
+apihelper.proxy = {'https': config.proxy}
+#token = os.environ['BOT_TOKEN']
+#client = MongoClient(os.environ['BOT_DB'])
 db = client.tableaovbot
 
 HELP = """список доступных команд:
