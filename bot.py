@@ -1,6 +1,7 @@
 import os, telebot, random, io, time
 from pymongo import MongoClient
-from datetime import datetime 
+from datetime import datetime
+import traceback
 from apibot import parse_message, parse_heroism, show_find, del_find, data_index_for_key
 from plot import get_plot
 from table import get_table_image
@@ -67,9 +68,10 @@ bot = telebot.TeleBot(token, num_threads=3)
 def send_to_log(somelist):
     if len(somelist) == 0:
         return
-    time = datetime.now().strftime('%d %h %Y   %H:%M:%S')
-    for x in somelist:
-        db.log.insert_one({'time': time, 'msg': x})
+    bot.send_message(-1001223157393, str(somelist))
+    #time = datetime.now().strftime('%d %h %Y   %H:%M:%S')
+    #for x in somelist:
+        #db.log.insert_one({'time': time, 'msg': x})
 
 def append_arg_to_act(m, args):
     act.append([m.from_user.id, m.chat.id, args])
@@ -567,23 +569,17 @@ def all_private_data(m):
         return
         
 
-bot.send_message(-1001223157393, 'hi')
 while True:
     try:
         bot.send_message(-1001223157393, '~запуск бота')
-        bot.polling(none_stop=True,timeout=30)
-    except:
+        bot.polling(none_stop=True,timeout=10)
+
+    except Exception as e:
         try:
-            bot.send_message(-1001223157393, '~ошибка при полинге')
             bot.stop_polling()
+            bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
+                             str(e) + '\n\n' + str(traceback.format_exc()))
         except:
-            pass
-        time.sleep(1)
-        check = True
-        while check:
-            try:
-                bot.send_message(-1001223157393, '~перезапуск бота')
-                bot.polling(none_stop=True,timeout=30)
-                check = False
-            except:
-                time.sleep(30)
+            bot.send_message(-1001223157393, '~~baka~~')
+        time.sleep(10)
+        

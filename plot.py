@@ -70,6 +70,10 @@ def get_plot(data, key, ID, is_admin):
                         int(data[cur_index]['log'][i]['msg'].split()[-1]))
                     vl[nick]['tm'].append(datetime.strptime(
                         data[cur_index]['log'][i]['time'],'%d.%m.%Y'))
+        for cur_index in cur_indexlist:
+            nick = data[cur_index]['gm']['nick']
+            if len(vl[nick]['tm']) == 0:
+                del vl[nick]
         vl['title'] = key
     elif is_common:
         cur_index = data_index_for_key(data, ID)
@@ -122,6 +126,7 @@ def plotting(vl):
             tl = vl[key]['tm'][0]
         if vl[key]['tm'][-1] > tr:
             tr = vl[key]['tm'][-1]
+
         is_first = False
     
     # создание пустого макета с ником
