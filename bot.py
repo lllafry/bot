@@ -7,11 +7,6 @@ from plot import get_plot
 from table import get_table_image
 from mongo import *
 
-#from telebot import apihelper
-#import config
-#token = config.token
-#client = MongoClient(config.db)
-#apihelper.proxy = {'https': config.proxy}
 token = os.environ['BOT_TOKEN']
 client = MongoClient(os.environ['BOT_DB'])
 db = client.tableaovbot
@@ -24,7 +19,7 @@ HELP = """список доступных команд:
 *delfind* <доступные номера> - удалить некие данные о вас (лс)
 подробнее: /helpmore"""
 HELPMORE = """бот принимает в лс форварды ваших профилей
-<ключ> - доступные ключи можно узнать, отправив пустую команду
+<ключ> - доступные ключи можно узнать, отправив пустую команду. также можно заменить все пробелы на "_" (/plot_lvl)
 <доступные номера> - список номеров строк из find через пробел
 delfind работает только следующей командой после find
 (лс) - работает только в личной беседе, в группах игнорируется
@@ -68,6 +63,9 @@ bot = telebot.TeleBot(token, num_threads=3)
 def send_to_log(somelist):
     if len(somelist) == 0:
         return
+    string = ''
+    for i in range(len(somelist)):
+        string += somelist[i] + '\n'
     bot.send_message(-1001223157393, str(somelist))
     #time = datetime.now().strftime('%d %h %Y   %H:%M:%S')
     #for x in somelist:
@@ -99,7 +97,7 @@ def in_act(m, remove=True):
             bad_user = True
     num_msg_to_block = 3
     if m.from_user.id in admins:
-        num_msg_to_block = 5
+        num_msg_to_block = 4
     is_find = False
     is_block = 0
     for i in range(len(users)):
@@ -126,8 +124,7 @@ def in_act(m, remove=True):
     if not is_find:
         if not any(x['ID'] == m.from_user.id for x in data):
             bad_user = True
-        users.append([m.from_user.id, m.date, 0, 0])
-    #print('work')    
+        users.append([m.from_user.id, m.date, 0, 0])   
     return bad_user, is_block // 1, get_arg_from_act(m, remove=remove)
 
 
@@ -246,13 +243,38 @@ def command_table(m):
         except:
             pass
 
+def extract_comm(s):
+    if not s[0] == r'/':
+        return ''
+    return s.split()[0].split('@')[0][1:]
 
-@bot.message_handler(commands=['plot'])#command
+def extract_after_comm(s):
+    if s.find(' ') == -1:
+        return ''
+    else:
+        return s[s.find(' '):].strip()
+
+def plot_work(m):
+    if m.content_type != 'text':
+        return False
+    command = extract_comm(m.text)
+    if len(command) == 0:
+        return False
+    if command[:4] != 'plot':
+        return False
+    return True
+
+
+@bot.message_handler(func=plot_work)#command
 def command_plot(m):
     bad_user, is_block, cmd = in_act(m)
     if bad_user or is_block:
         return
-    s_key = extract_after_comm(m.text)
+    command = extract_comm(m.text)
+    if len(command) != 4:
+        s_key = command[4:].replace('_', ' ')
+    else:
+        s_key = extract_after_comm(m.text)
     if len(s_key) == 0:
         bot.send_message(m.chat.id, 'Добавьте к команде один или несколько ключей:'+
                          ' lvl, atc, def, eqatc, eqdef')
@@ -266,16 +288,6 @@ def command_plot(m):
         bot.send_message(m.chat.id, msg)
 
 
-def extract_comm(s):
-    if not s[0] == r'/':
-        return ''
-    return s.split()[0].split('@')[0][1:]
-
-def extract_after_comm(s):
-    if s.find(' ') == -1:
-        return ''
-    else:
-        return s[s.find(' '):].strip()
 
 @bot.message_handler(commands=['adduser'])#command a
 def command_adduser(m):
@@ -320,15 +332,31 @@ def command_admin(m):
             save_admins(db, admins)
             bot.send_message(m.chat.id, 'ok')
 
+def find_work(m):
+    if m.content_type != 'text':
+        return False
+    command = extract_comm(m.text)
+    if len(command) == 0:
+        return False
+    if command[:4] != 'find':
+        return False
+    return True
 
-@bot.message_handler(commands=['find'])#command l k
+
+@bot.message_handler(func=find_work)#command l k
 def command_find(m):
     bad_user, is_block, cmd = in_act(m)
     if bad_user or is_block:
         return
     if m.chat.type != 'private':
         return
-    s_key = extract_after_comm(m.text)
+    
+    command = extract_comm(m.text)
+    if len(command) != 4:
+        s_key = command[4:].replace('_', ' ')
+    else:
+        s_key = extract_after_comm(m.text)
+
     NO_KEY = ('Добавьте к команде один из ключей: all, lvl, def, ' +
               'atc, class, nick, eqact, eqdef, eq.[spear, shield, ' +
               'helment, armor, glove, boot], возможен неполный набор ключа')
@@ -560,7 +588,7 @@ def forward_from_any_user(m):
     bot.reply_to(m, msg)
 
 
-@bot.message_handler(fun=lambda x: True)
+@bot.message_handler(func=lambda x: True)
 def all_private_data(m):
     if m.content_type != 'text':
         return
@@ -568,10 +596,14 @@ def all_private_data(m):
     if bad_user or is_block:
         return
         
-
+bot.send_message(-1001223157393, '~первичный запуск бота')
+is_first_work = True
 while True:
     try:
-        bot.send_message(-1001223157393, '~запуск бота')
+        if is_first_work:
+            is_first_work = False
+        else:
+            bot.send_message(-1001223157393, '~запуск бота')
         bot.polling(none_stop=True,timeout=10)
 
     except Exception as e:
