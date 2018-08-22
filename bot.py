@@ -629,12 +629,16 @@ while True:
         if is_first_work:
             is_first_work = False
         else:
-            bot.send_message(-1001223157393, '~запуск бота')
+            try:
+                bot.send_message(-1001223157393, '~запуск бота')
+            except:
+                pass
         bot.polling(none_stop=True,timeout=10)
 
     except Exception as e:
         try:
-            bot.stop_polling()
+            bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
+                             str(e))
             bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
                              str(e) + '\n\n' + str(traceback.format_exc()))
         except:
