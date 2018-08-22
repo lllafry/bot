@@ -10,10 +10,23 @@ def get_plot(data, key, ID, is_admin):
     data - поток байтов для отправки ботом"""
     KEYS = ['lvl', 'atc', 'def', 'eqatc', 'eqdef']
     keylist = key.split()
+    all_her = 100
     is_all, is_common = False, False
     
-    if keylist[0] == 'all':
+    if keylist[0][:3] == 'all':
         if (keylist[-1] in KEYS) and (len(keylist) == 2):
+            temp = keylist[0][3:]
+            minus = False
+            if len(temp) > 0:
+                if temp[0] == '-':
+                    minus = True
+                    temp = temp[1:]
+            if is_admin and temp.isdigit():
+                if int(temp) < 300:
+                    if minus:
+                        all_her = -1
+                    else:
+                        all_her = int(temp)
             is_all = True
     else:
         for i in range(len(keylist)):
@@ -27,11 +40,13 @@ def get_plot(data, key, ID, is_admin):
     # составление vl словаря (в зависимости от is_all, is_common    
     if is_all:
         key = keylist[-1]
+        is_group = True if all_her == -1 else False
 
         cur_indexlist = []
         cur_her = []
         for i in range(len(data)):
-            if data[i]['ad']['heroism'] >= 100:
+            if data[i]['ad']['heroism'] >= all_her and (
+                data[i]['ad']['group'] == 0 or is_group):
                 cur_indexlist.append(i)
                 cur_her.append(data[i]['ad']['heroism'])
         
@@ -55,6 +70,10 @@ def get_plot(data, key, ID, is_admin):
                         int(data[cur_index]['log'][i]['msg'].split()[-1]))
                     vl[nick]['tm'].append(datetime.strptime(
                         data[cur_index]['log'][i]['time'],'%d.%m.%Y'))
+        for cur_index in cur_indexlist:
+            nick = data[cur_index]['gm']['nick']
+            if len(vl[nick]['tm']) == 0:
+                del vl[nick]
         vl['title'] = key
     elif is_common:
         cur_index = data_index_for_key(data, ID)
@@ -107,6 +126,7 @@ def plotting(vl):
             tl = vl[key]['tm'][0]
         if vl[key]['tm'][-1] > tr:
             tr = vl[key]['tm'][-1]
+
         is_first = False
     
     # создание пустого макета с ником
