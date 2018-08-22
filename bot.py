@@ -1,4 +1,4 @@
-import os, telebot, random, io, time
+import os, telebot, random, io, time, json
 from pymongo import MongoClient
 from datetime import datetime
 import traceback
@@ -331,6 +331,31 @@ def command_admin(m):
             admins.remove(ID)
             save_admins(db, admins)
             bot.send_message(m.chat.id, 'ok')
+
+
+@bot.message_handler(commands=['data'])#command a
+def command_data(m):
+    bad_user, is_block, cmd = in_act(m)
+    if bad_user or is_block:
+        return
+    if m.from_user.id not in admins:
+        return
+    all_data = {}
+    all_data['comms'] = comms
+    all_data['admins'] = admins
+    all_data['chats'] = chats
+    all_data['users'] = data
+    #doc = open(r'config/alldata.txt', 'rb')
+    #answer = bot.send_document(m.chat.id, doc)
+    #return
+    with io.StringIO() as file:
+        json.dump(all_data, file)
+        data_bytes = file.getvalue().encode()
+        with io.BytesIO(data_bytes) as bfile:
+            bfile.name = 'data.txt'
+            answer = bot.send_document(m.chat.id, bfile)
+        del data_bytes, answer
+
 
 def find_work(m):
     if m.content_type != 'text':
