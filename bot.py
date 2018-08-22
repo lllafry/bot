@@ -7,6 +7,7 @@ from plot import get_plot
 from table import get_table_image
 from mongo import *
 
+
 token = os.environ['BOT_TOKEN']
 client = MongoClient(os.environ['BOT_DB'])
 db = client.tableaovbot
@@ -66,7 +67,7 @@ def send_to_log(somelist):
     string = ''
     for i in range(len(somelist)):
         string += somelist[i] + '\n'
-    bot.send_message(-1001223157393, str(somelist))
+    bot.send_message(-1001223157393, string)
     #time = datetime.now().strftime('%d %h %Y   %H:%M:%S')
     #for x in somelist:
         #db.log.insert_one({'time': time, 'msg': x})
