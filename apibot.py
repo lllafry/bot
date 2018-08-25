@@ -702,7 +702,7 @@ def show_find(data, key, ID, is_admin, start_with = 0):
 
     if start_with > 0 and num_start == 0:
         return 'и г н о р и р у ю', '', []
-    if correct_len == num_stop and correct_len > 0 and is_all:
+    if correct_len == num_stop and correct_len > 0 and is_all and num_start == 1:
         infostr += 'Все записи (' + str(correct_len) +'):'
     elif correct_len == 0:
         infostr += 'Для ключа ' + w_key + ' записи не найдены'
