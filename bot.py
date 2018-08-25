@@ -8,42 +8,32 @@ from table import get_table_image
 from mongo import *
 
 try:
-    import config
+    import my_config
     from telebot import apihelper
-    token = config.token
-    client = MongoClient(config.db)
-    apihelper.proxy = {'https': config.proxy}
+    token = my_config.token
+    client = MongoClient(my_config.db)
+    apihelper.proxy = {'https': my_config.proxy}
+    print('local bot')
 except ImportError:
     token = os.environ['BOT_TOKEN']
     client = MongoClient(os.environ['BOT_DB'])
 
 db = client.tableaovbot
 
-HELP = """список доступных команд:
-*chatid* - вывести ID текущего чата
-*table* - вывести таблицу отряда
-*plot* <ключ> - вывести некий график
-*find* <ключ> - вывести некие данные о вас (лс)
-*delfind* <доступные номера> - удалить некие данные о вас (лс)
-подробнее: /helpmore"""
-HELPMORE = """бот принимает в лс форварды ваших профилей
-<ключ> - доступные ключи можно узнать, отправив пустую команду. также можно заменить все пробелы на "_" (/plot_lvl)
-<доступные номера> - список номеров строк из find через пробел
-delfind работает только следующей командой после find
-(лс) - работает только в личной беседе, в группах игнорируется
-бот пытается игнорировать массовое появление сообщений от вас
-информация о командах администратора  по /admhelp"""
-ADMHELP = """*cmd* - показывает содержимое внутреннего флага о вас в данный момент, имеет наивысший приоритет
-*setcomm* <commname> - создает новую команду с низким приоритетом, commname - имя новой команды без слеша английскими буквами. далее нужно будет выслать сообщение с текстом (приоритет - после cmd)
-*delcomm* <commname> - удаляет низкоприоритетную команду
-*asuka* - на вызов не администратора отвечает 'игнорирую', на ваш вызов же ответит случайной фразой из некого набора
-*addchat* - добавляет чат в список рабочих чатов, иначе бот по любой команде попытается выйти. нужно добавить бота в чат и вызвать эту команду
-*adduser* <ID> - добавляет нового пользователя в некий временный белый список, новые пользователи (нет в таблице) полностью игнорируются ботом. после этой команды бот будет обрабатывать присланный пользователем 'херо'
-find, plot могут иметь дополнительный аргумент (find <пользователь> <ключ>)
-<пользователь> - ID, игровой ник, юзернейм. частично поддерживаются прошлые ники и юзернеймы, ники из нескольких слов
-plot all <one key> - строит график для нескольких пользователей по одному ключу
-*deluser* <пользователь> - удаляет всевозможные данные о игроке, в том числе административные права. после первого вызова команда покажет найденого по ключу пользователя и попросит подтвердить удаление повторным вводом команды
-*admin* <ключ1> - добавить исключить пользователя из списка администраторов, работает по реплаю, <ключ1> - give / take, кандидат на добавление должен быть в таблице"""
+text = {}
+with open('text.txt') as file:
+    textlist = file.read().split('\n\n\n')
+    for i in range(len(textlist)):
+        textlist[i] = textlist[i].lstrip('\n ')
+        p = textlist[i].strip('\n').find('\n')
+        if p > 0 and p < len(textlist[i]):
+            text[textlist[i][0:p]] = textlist[i][p + 1:]
+
+HELP = text['HELP']
+HELPMORE = text['HELPMORE']
+ADMHELP = text['ADMHELP']
+del text
+
 ASUKA = ['так уж и быть, отвечу', 'чего тебе', 'baka', '*ррррррр*', '..', '...',
          'не надо мне тут']
 TRY_CW3 = ['ну ну', 'he he' ,'это было близко' ,'что-то тут не то' ,'hmmmm' ,'вы ошиблись' ]
@@ -51,7 +41,6 @@ BAD_ANSWER = ['baka', '...', 'чуть все не сломалось', 'ну а
               'лучше не повторяй такое', 'мне больно']
 COMMANDS = ['table', 'help', 'setcomm', 'delcomm', 'get', 'asuka', 'addme',
             'admin', 'admins', 'find', 'delfind', 'deluser']
-
 SETCOMM = ['text', 'sticker', 'document', 'voice', 'photo']
 
 
@@ -161,8 +150,29 @@ def work_act_add_data_for_setcomm(m):
             break
     try:
         if m.content_type == 'text':
+            to_send = m.text
+            try:
+                new_str = ''
+                end_str = 0
+                if len(m.entities) > 0:
+                    for i in range(len(m.entities)):
+                        if m.entities[i].type in ['italic', 'bold', 'code']:
+                            if m.entities[i].type == 'code':
+                                t = 'code'
+                            else:
+                                t = m.entities[i].type[0]
+                            offset = m.entities[i].offset
+                            new_str += to_send[end_str:offset]
+                            new_str += '<' + t + '>'
+                            new_str += to_send[offset:offset + m.entities[i].length]
+                            new_str += '</' + t + '>'
+                            end_str = offset + m.entities[i].length
+                    new_str += to_send[end_str:]
+                    to_send = new_str
+            except:
+                pass
             comms.append({'comm': cmd[1], 'type': 'text',
-                          'data': m.text})
+                          'data': to_send})
             good_type = True
         elif m.content_type == 'sticker':
             comms.append({'comm': cmd[1], 'type': 'sticker',
@@ -219,7 +229,8 @@ def command_help(m):
         msg += comms[i]['comm']
         if i != len(comms) - 1:
             msg += ', '
-    bot.send_message(m.chat.id, msg, parse_mode='Markdown')
+    bot.send_message(m.chat.id, msg, parse_mode='HTML')
+    #Markdown
 
 
 @bot.message_handler(commands=['helpmore'])#command
@@ -227,7 +238,7 @@ def command_helpmore(m):
     bad_user, is_block, cmd = in_act(m)
     if bad_user or is_block:
         return
-    bot.send_message(m.chat.id, HELPMORE, parse_mode='Markdown')
+    bot.send_message(m.chat.id, HELPMORE, parse_mode='HTML')
 
 @bot.message_handler(commands=['admhelp'])#command
 def command_admhelp(m):
@@ -236,7 +247,7 @@ def command_admhelp(m):
         return
     if m.from_user.id not in admins:
         return
-    bot.send_message(m.chat.id, ADMHELP, parse_mode='Markdown')
+    bot.send_message(m.chat.id, ADMHELP, parse_mode='HTML')
 
 @bot.message_handler(commands=['asuka'])#command
 def command_asuka(m):
@@ -581,17 +592,22 @@ def command_from_comm(m):
     command = extract_comm(m.text).lower()
     for i in range(len(comms)):
         if command == comms[i]['comm']:
-            if comms[i]['type'] == 'text':
-                bot.send_message(m.chat.id, comms[i]['data'])
-            elif comms[i]['type'] == 'sticker':
-                bot.send_sticker(m.chat.id, comms[i]['data'])
-            elif comms[i]['type'] == 'document':
-                bot.send_document(m.chat.id, comms[i]['data'])
-            elif comms[i]['type'] == 'voice':
-                bot.send_voice(m.chat.id, comms[i]['data'])
-            elif comms[i]['type'] == 'photo':
-                bot.send_photo(m.chat.id, comms[i]['data'])
-                
+            try:
+                if comms[i]['type'] == 'text':
+                    try:
+                        bot.send_message(m.chat.id, comms[i]['data'], parse_mode='HTML')
+                    except:
+                        bot.send_message(m.chat.id, comms[i]['data'])
+                elif comms[i]['type'] == 'sticker':
+                    bot.send_sticker(m.chat.id, comms[i]['data'])
+                elif comms[i]['type'] == 'document':
+                    bot.send_document(m.chat.id, comms[i]['data'])
+                elif comms[i]['type'] == 'voice':
+                    bot.send_voice(m.chat.id, comms[i]['data'])
+                elif comms[i]['type'] == 'photo':
+                    bot.send_photo(m.chat.id, comms[i]['data'])
+            except:
+                bot.send_message(m.chat.id, 'Данные по команде вероятно были потеряны')    
             break
 
 def forward_ID(m, msg_text_end_with=''):
@@ -682,8 +698,8 @@ while True:
             except:
                 pass
         bot.polling(none_stop=True,timeout=10)
-    except TimeoutError as e:
-        bot.send_message(-1001223157393, '~TimeoutError')
+    except requests.exceptions:
+        bot.send_message(-1001223157393, '~хе-хе')
     except Exception as e:
         try:
             
