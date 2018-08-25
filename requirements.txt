@@ -1,10 +1,6 @@
-<<<<<<< HEAD
+
 pyTelegramBotAPI
+
 pymongo
+
 pillow
-=======
-pyTelegramBotAPI
-pymongo
-pillow
->>>>>>> a6de427c77d3a1c76259a29f3f0fcf7cbacd4e2e
-dnspython
