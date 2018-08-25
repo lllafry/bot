@@ -378,10 +378,11 @@ def command_find(m):
         return
     
     command = extract_comm(m.text)
-    if len(command) != 4:
-        s_key = command[4:].replace('_', ' ')
-    else:
-        s_key = extract_after_comm(m.text)
+    s_key = (command[4:].replace('_', ' ') + ' ' + extract_after_comm(m.text)).strip()
+    #if len(command) != 4:
+    #    s_key = command[4:].replace('_', ' ')
+    #else:
+    #    s_key = extract_after_comm(m.text)
 
     NO_KEY = ('Добавьте к команде один из ключей: all, lvl, def, ' +
               'atc, class, nick, eqact, eqdef, eq.[spear, shield, ' +
@@ -390,7 +391,14 @@ def command_find(m):
         bot.send_message(m.chat.id, NO_KEY)
         return
     is_admin = True if m.from_user.id in admins else False
-    msg, infostr, args = show_find(data, s_key, m.from_user.id, is_admin)
+    start_with = 0
+    ID = m.from_user.id
+    if cmd[0] == 'find' and s_key == 'next':
+        if len(cmd[2]) > 0:
+            start_with = cmd[2][-1] + 1
+            ID = cmd[1]
+            s_key = cmd[3]
+    msg, infostr, args = show_find(data, s_key, ID, is_admin, start_with)
     if len(msg) == 0:
         bot.send_message(m.chat.id, infostr, parse_mode='HTML')
         append_arg_to_act(m, args)
@@ -415,12 +423,13 @@ def command_delfind(m):
         bot.send_message(m.chat.id, random.choice(BAD_ANSWER))
         return
     intlist = [int(x) for x in strlist]
-    if (max(intlist) > len(cmd[2])) or (min(intlist) < 1):
+    if (max(intlist) > len(cmd[2]) + cmd[4] - 1) or (min(intlist) < cmd[4]):
+    #if (max(intlist) > len(cmd[2])) or (min(intlist) < 1):
         bot.send_message(m.chat.id, random.choice(BAD_ANSWER))
         return
     is_admin = True if m.from_user.id in admins else False
     
-    is_change = del_find(data, cmd[1], cmd[2], intlist)
+    is_change = del_find(data, cmd[1], cmd[2], intlist, cmd[4])
     if is_change:
         save_data(db, data)
         bot.send_message(m.chat.id, 'done')
@@ -634,14 +643,16 @@ while True:
             except:
                 pass
         bot.polling(none_stop=True,timeout=10)
-
+    except TimeoutError as e:
+        bot.send_message(-1001223157393, '~TimeoutError')
     except Exception as e:
         try:
-            bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
-                             str(e))
+            
             bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
                              str(e) + '\n\n' + str(traceback.format_exc()))
         except:
-            bot.send_message(-1001223157393, '~~baka~~')
-        time.sleep(10)
+            bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
+                             str(e))
+        bot.send_message(-1001223157393, '!остановка бота')
+        raise SystemExit(1)
         
