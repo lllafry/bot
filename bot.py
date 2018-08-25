@@ -45,6 +45,7 @@ BAD_ANSWER = ['baka', '...', 'чуть все не сломалось', 'ну а
 COMMANDS = ['table', 'help', 'setcomm', 'delcomm', 'get', 'asuka', 'addme',
             'admin', 'admins', 'find', 'delfind', 'deluser']
 
+SETCOMM = ['text', 'sticker', 'document', 'voice', 'photo']
 
 
 data = load_data(db)
@@ -139,20 +140,52 @@ def command_cmd(m):
     bot.send_message(m.chat.id, str(cmd))
 
 
-@bot.message_handler(func=lambda x: get_arg_from_act(x, False)[0] == 'setcomm')#command (a) k
-def work_act_add_text_for_setcomm(m):
+@bot.message_handler(func=lambda x: get_arg_from_act(x, False)[0] == 'setcomm',
+                     content_types=SETCOMM)#command (a) k
+def work_act_add_data_for_setcomm(m):
     bad_user, is_block, cmd = in_act(m)
     if bad_user:
         return
+    is_was, good_type = False, False
     for i in range(len(comms)):
         if cmd[1] == comms[i]['comm']:
-            comms[i]['text'] = m.text
-            save_comms(db, comms)
-            bot.send_message(m.chat.id, 'Команда {} успешно изменена'.format(cmd[1]))
-            return
-    comms.append({'comm': cmd[1], 'text': m.text})
+            is_was = True
+            del comms[i]
+            break
+    try:
+        if m.content_type == 'text':
+            comms.append({'comm': cmd[1], 'type': 'text',
+                          'data': m.text})
+            good_type = True
+        elif m.content_type == 'sticker':
+            comms.append({'comm': cmd[1], 'type': 'sticker',
+                          'data': m.json['sticker']['file_id']})
+            good_type = True
+        elif m.content_type == 'document':
+            comms.append({'comm': cmd[1], 'type': 'document',
+                          'data': m.json['document']['file_id']})
+            good_type = True
+        elif m.content_type == 'voice':
+            comms.append({'comm': cmd[1], 'type': 'voice',
+                          'data': m.json['voice']['file_id']})
+            good_type = True
+        elif m.content_type == 'photo':
+            comms.append({'comm': cmd[1], 'type': 'photo',
+                          'data': m.json['photo'][-1]['file_id']})
+            good_type = True
+    except:
+        bot.send_message(m.chat.id, 'Ошибочка вышла')
+        return
+
     save_comms(db, comms)
-    bot.send_message(m.chat.id, 'Команда {} успешно добавлена'.format(cmd[1]))
+    if not good_type and is_was:
+        bot.send_message(m.chat.id, 'Команда ' + cmd[1] +
+                         ' была удалена, а для новой данных не оказалось')
+        return
+    if is_was:
+        bot.send_message(m.chat.id, 'Команда ' + cmd[1] +' успешно изменена')
+    else:
+        bot.send_message(m.chat.id, 'Команда ' + cmd[1] +' успешно добавлена')
 
 
 @bot.message_handler(commands=['start'])#command
@@ -271,11 +304,8 @@ def command_plot(m):
     bad_user, is_block, cmd = in_act(m)
     if bad_user or is_block:
         return
-    command = extract_comm(m.text)
-    if len(command) != 4:
-        s_key = command[4:].replace('_', ' ')
-    else:
-        s_key = extract_after_comm(m.text)
+    s_key = (extract_comm(m.text)[4:].replace('_', ' ') + ' ' + extract_after_comm(m.text)).strip()
+    
     if len(s_key) == 0:
         bot.send_message(m.chat.id, 'Добавьте к команде один или несколько ключей:'+
                          ' lvl, atc, def, eqatc, eqdef')
@@ -377,12 +407,7 @@ def command_find(m):
     if m.chat.type != 'private':
         return
     
-    command = extract_comm(m.text)
-    s_key = (command[4:].replace('_', ' ') + ' ' + extract_after_comm(m.text)).strip()
-    #if len(command) != 4:
-    #    s_key = command[4:].replace('_', ' ')
-    #else:
-    #    s_key = extract_after_comm(m.text)
+    s_key = (extract_comm(m.text)[4:].replace('_', ' ') + ' ' + extract_after_comm(m.text)).strip()
 
     NO_KEY = ('Добавьте к команде один из ключей: all, lvl, def, ' +
               'atc, class, nick, eqact, eqdef, eq.[spear, shield, ' +
@@ -501,8 +526,8 @@ def command_setcomm(m):
             bot.send_message(m.chat.id, 'Команда должна содержать только английские буквы')
             return
         append_arg_to_act(m, ['setcomm', command])
-        bot.send_message(m.chat.id, 'Хорошо, теперь пришлите выводимый ' +
-                         'по команде {} текст'.format(command))
+        bot.send_message(m.chat.id, 'Хорошо, теперь пришлите выводимое ' +
+                         'по команде {} сообщение'.format(command))
 
 
 @bot.message_handler(commands=['delcomm'])#command a
@@ -531,7 +556,7 @@ def command_delcomm(m):
 
 
 def is_from_comm(m): #последняя
-    if m.content_type != 'text':
+    if  m.content_type != 'text':
         return False
     command = extract_comm(m.text).lower()
     if len(command) == 0:
@@ -549,9 +574,18 @@ def command_from_comm(m):
     command = extract_comm(m.text).lower()
     for i in range(len(comms)):
         if command == comms[i]['comm']:
-            bot.send_message(m.chat.id, comms[i]['text'])
+            if comms[i]['type'] == 'text':
+                bot.send_message(m.chat.id, comms[i]['data'])
+            elif comms[i]['type'] == 'sticker':
+                bot.send_sticker(m.chat.id, comms[i]['data'])
+            elif comms[i]['type'] == 'document':
+                bot.send_document(m.chat.id, comms[i]['data'])
+            elif comms[i]['type'] == 'voice':
+                bot.send_voice(m.chat.id, comms[i]['data'])
+            elif comms[i]['type'] == 'photo':
+                bot.send_photo(m.chat.id, comms[i]['data'])
+                
             break
-
 
 def forward_ID(m, msg_text_end_with=''):
     """Возвращает ID форварда или 0"""
@@ -623,10 +657,8 @@ def forward_from_any_user(m):
     bot.reply_to(m, msg)
 
 
-@bot.message_handler(func=lambda x: True)
+@bot.message_handler(content_types=SETCOMM)
 def all_private_data(m):
-    if m.content_type != 'text':
-        return
     bad_user, is_block, cmd = in_act(m)
     if bad_user or is_block:
         return
