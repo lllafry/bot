@@ -7,6 +7,7 @@ from plot import get_plot
 from table import get_table_image
 from mongo import *
 
+<<<<<<< HEAD
 try:
     import my_config
     from telebot import apihelper
@@ -34,6 +35,38 @@ HELPMORE = text['HELPMORE']
 ADMHELP = text['ADMHELP']
 del text
 
+=======
+
+token = os.environ['BOT_TOKEN']
+client = MongoClient(os.environ['BOT_DB'])
+db = client.tableaovbot
+
+HELP = """список доступных команд:
+*chatid* - вывести ID текущего чата
+*table* - вывести таблицу отряда
+*plot* <ключ> - вывести некий график
+*find* <ключ> - вывести некие данные о вас (лс)
+*delfind* <доступные номера> - удалить некие данные о вас (лс)
+подробнее: /helpmore"""
+HELPMORE = """бот принимает в лс форварды ваших профилей
+<ключ> - доступные ключи можно узнать, отправив пустую команду. также можно заменить все пробелы на "_" (/plot_lvl)
+<доступные номера> - список номеров строк из find через пробел
+delfind работает только следующей командой после find
+(лс) - работает только в личной беседе, в группах игнорируется
+бот пытается игнорировать массовое появление сообщений от вас
+информация о командах администратора  по /admhelp"""
+ADMHELP = """*cmd* - показывает содержимое внутреннего флага о вас в данный момент, имеет наивысший приоритет
+*setcomm* <commname> - создает новую команду с низким приоритетом, commname - имя новой команды без слеша английскими буквами. далее нужно будет выслать сообщение с текстом (приоритет - после cmd)
+*delcomm* <commname> - удаляет низкоприоритетную команду
+*asuka* - на вызов не администратора отвечает 'игнорирую', на ваш вызов же ответит случайной фразой из некого набора
+*addchat* - добавляет чат в список рабочих чатов, иначе бот по любой команде попытается выйти. нужно добавить бота в чат и вызвать эту команду
+*adduser* <ID> - добавляет нового пользователя в некий временный белый список, новые пользователи (нет в таблице) полностью игнорируются ботом. после этой команды бот будет обрабатывать присланный пользователем 'херо'
+find, plot могут иметь дополнительный аргумент (find <пользователь> <ключ>)
+<пользователь> - ID, игровой ник, юзернейм. частично поддерживаются прошлые ники и юзернеймы, ники из нескольких слов
+plot all <one key> - строит график для нескольких пользователей по одному ключу
+*deluser* <пользователь> - удаляет всевозможные данные о игроке, в том числе административные права. после первого вызова команда покажет найденого по ключу пользователя и попросит подтвердить удаление повторным вводом команды
+*admin* <ключ1> - добавить исключить пользователя из списка администраторов, работает по реплаю, <ключ1> - give / take, кандидат на добавление должен быть в таблице"""
+>>>>>>> a6de427c77d3a1c76259a29f3f0fcf7cbacd4e2e
 ASUKA = ['так уж и быть, отвечу', 'чего тебе', 'baka', '*ррррррр*', '..', '...',
          'не надо мне тут']
 TRY_CW3 = ['ну ну', 'he he' ,'это было близко' ,'что-то тут не то' ,'hmmmm' ,'вы ошиблись' ]
@@ -299,6 +332,7 @@ def extract_comm(s):
     if not s[0] == r'/':
         return ''
     return s.split()[0].split('@')[0][1:]
+<<<<<<< HEAD
 
 def extract_after_comm(s):
     if s.find(' ') == -1:
@@ -317,13 +351,41 @@ def plot_work(m):
     return True
 
 
+=======
+
+def extract_after_comm(s):
+    if s.find(' ') == -1:
+        return ''
+    else:
+        return s[s.find(' '):].strip()
+
+def plot_work(m):
+    if m.content_type != 'text':
+        return False
+    command = extract_comm(m.text)
+    if len(command) == 0:
+        return False
+    if command[:4] != 'plot':
+        return False
+    return True
+
+
+>>>>>>> a6de427c77d3a1c76259a29f3f0fcf7cbacd4e2e
 @bot.message_handler(func=plot_work)#command
 def command_plot(m):
     bad_user, is_block, cmd = in_act(m)
     if bad_user or is_block:
         return
+<<<<<<< HEAD
     s_key = (extract_comm(m.text)[4:].replace('_', ' ') + ' ' + extract_after_comm(m.text)).strip()
     
+=======
+    command = extract_comm(m.text)
+    if len(command) != 4:
+        s_key = command[4:].replace('_', ' ')
+    else:
+        s_key = extract_after_comm(m.text)
+>>>>>>> a6de427c77d3a1c76259a29f3f0fcf7cbacd4e2e
     if len(s_key) == 0:
         bot.send_message(m.chat.id, 'Добавьте к команде один или несколько ключей:'+
                          ' lvl, atc, def, eqatc, eqdef')
@@ -425,7 +487,15 @@ def command_find(m):
     if m.chat.type != 'private':
         return
     
+<<<<<<< HEAD
     s_key = (extract_comm(m.text)[4:].replace('_', ' ') + ' ' + extract_after_comm(m.text)).strip()
+=======
+    command = extract_comm(m.text)
+    if len(command) != 4:
+        s_key = command[4:].replace('_', ' ')
+    else:
+        s_key = extract_after_comm(m.text)
+>>>>>>> a6de427c77d3a1c76259a29f3f0fcf7cbacd4e2e
 
     NO_KEY = ('Добавьте к команде один из ключей: all, lvl, def, ' +
               'atc, class, nick, eqact, eqdef, eq.[spear, shield, ' +
@@ -680,7 +750,11 @@ def forward_from_any_user(m):
     bot.reply_to(m, msg)
 
 
+<<<<<<< HEAD
 @bot.message_handler(content_types=SETCOMM)
+=======
+@bot.message_handler(func=lambda x: True)
+>>>>>>> a6de427c77d3a1c76259a29f3f0fcf7cbacd4e2e
 def all_private_data(m):
     bad_user, is_block, cmd = in_act(m)
     if bad_user or is_block:
@@ -698,6 +772,7 @@ while True:
             except:
                 pass
         bot.polling(none_stop=True,timeout=10)
+<<<<<<< HEAD
     except requests.exceptions:
         bot.send_message(-1001223157393, '~хе-хе')
     except Exception as e:
@@ -710,4 +785,16 @@ while True:
                              str(e))
         bot.send_message(-1001223157393, '!остановка бота')
         raise SystemExit(1)
+=======
+
+    except Exception as e:
+        try:
+            bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
+                             str(e))
+            bot.send_message(-1001223157393, '~ошибка при поллинге\n\n' +
+                             str(e) + '\n\n' + str(traceback.format_exc()))
+        except:
+            bot.send_message(-1001223157393, '~~baka~~')
+        time.sleep(10)
+>>>>>>> a6de427c77d3a1c76259a29f3f0fcf7cbacd4e2e
         
