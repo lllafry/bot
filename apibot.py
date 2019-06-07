@@ -1,9 +1,12 @@
 import datetime
 
+class KeyErr(Exception):
+    pass
+
 def _toint(s):
-    """Превращает максимальное число символов строки в число
+    """Превращает максимальное число начальных символов строки в число
     Пример:
-    21вуп34 -> 21, -31 e -> -31, e32 -> 0, 3.1 -> 3"""
+    21вуп34 -> 21, -31 e -> -31, e32 -> 0, 3.1 -> 3 """
     isNegative = False
     if len(s) > 1:
         if s[0] == '-' and s[1].isdigit():
@@ -134,7 +137,7 @@ def _decode_equip(s):
                     break
     s = [x for x in s if x[2]]
     # Теперь поиск аксессуаров
-    equipSet = ['Кроличья лапка', 'Фляга', 'Коготь вампира', 'Бутылка']
+    equipSet = ['Кроличья лапка', 'Фляга', 'Коготь вампира', 'Бутылка', 'Счастливая кость']
     for i in range(0, len(s)):
         for x in equipSet:
             if code:
@@ -227,15 +230,19 @@ def _decode_pet(s):
     petLevel = _toint(s[p:p+10])
     return [petLevel, petType]
 
-def _is_warlord(nick):
+def _is_warlord(nick, is_return_nick=True):
     """Определяет наличие в нике звезды варлорда и убирает ее.
     Возвращает [bool, nick]"""
-    if len(nick) < 2:
-        return [False, nick]
-    if nick[0:2] == '\u2b50\ufe0f': # Определяет наличие в нике звезды варлорда
-        return [True, nick[2:]]
+    if (nick[0:2] == '\u2b50\ufe0f') and (len(nick) > 2): # Определяет наличие в нике звезды варлорда
+        if is_return_nick:
+            return [True, nick[2:]]
+        else:
+            return True
     else:
-        return [False, nick]
+        if is_return_nick:
+            return [False, nick]
+        else:
+            return False
 
 
 def _parse_data_gm(s):
@@ -442,23 +449,20 @@ def _parse_data_ad(m):
                  heroism = 0, group = group)
 
 
-def parse_message(data, m, admins):
-    """alldata - dict с информацией
-    m - объект от бота
-    admins - список админов
+def parse_message(data, m, is_admin):
+    """m - объект сообщения от бота
+    
     return: is_data_change, is_table_change, inter
-    inter - dict внутренние сообщения, должна включать main, send, msg
-    main - str сообщения, отправляемого ботом назад
-    send - list дополнительных сообщений. хм....
-    msg - list сообщений, которые могут идти только в какой-нибудь лог"""
+    inter - dict внутренние сообщения, должна включать main, msg
+    main - str сообщение, отправляемое ботом как результат действия команды
+    msg - list сообщения, которые идут лог (нужные пометки)"""
     def edit_main_send(inter):
-        for i in range(len(inter['send'])):
-            if i == 0:
-                if len(inter['send']) == 1:
-                    inter['main'] += '\n\nпримечание:'
-                else:
-                    inter['main'] +='\n\nпримечания:'
-            inter['main'] += '\n   {}'.format(inter['send'][i])
+        if len(inter['send']) == 0:
+            return
+        ending = 'е' if len(inter['send']) == 1 else 'я'
+        inter['main'] += ('\n\nпримечани' + ending + ':\n' +
+                          '\n   '.join(inter['send']))
+        del inter['send']
         return 
     isok, inter, gm = _parse_data_gm(m.text)
     ad = _parse_data_ad(m)
@@ -467,67 +471,73 @@ def parse_message(data, m, admins):
         inter['main'] = 'baka'
         edit_main_send(inter)
         return False, False, inter
-    is_admin = True if ID in admins else False
     is_admin_work = False
+    
     if is_admin:
+        is_self = False
         for i in range(len(data)):
-            if data[i]['gm']['nick'] == gm['nick'] and data[i]['ID'] != ID:
-                adm_name = m.from_user.first_name
-                ID = data[i]['ID']
-                is_admin_work = True# администратор обновляет не себя (явно)
-                time = ad['time']
-                ad = data[i]['ad']
-                ad['time'] = time
-                ad['group'] = 0
+            if data[i]['gm']['nick'] == gm['nick'] and data[i]['ID'] == ID:
+                is_self = True# администратор обновляет себя (явно)
                 break
+        if not is_self:
+            for i in range(len(data)):
+                if data[i]['gm']['nick'] == gm['nick'] and data[i]['ID'] != ID:
+                    adm_name = m.from_user.first_name
+                    is_admin_work = True# администратор обновляет не себя (явно)
+                    ID = data[i]['ID']
+                    time = ad['time']
+                    ad = data[i]['ad']
+                    ad['time'] = time
+                    ad['group'] = 0
+                    break
 
     for i in range(len(data)):
         if data[i]['ID'] == ID:
-            if not is_admin_work:
-                # проверка, вдруг пользователь прислал информацию не о себе (многие данные изменены)
-                index = 0
-                if data[i]['gm']['nick'] != gm['nick']:
-                    index += 8
-                if data[i]['gm']['eq'] != gm['eq']:
-                    index += 3
+            # проверка, вдруг пользователь прислал информацию не о себе (многие
+            # данные изменены)
+            index = 0
+            if data[i]['gm']['nick'] != gm['nick']:
+                index += 8
+            if data[i]['gm']['eq'] != gm['eq']:
+                index += 3
                 
-                def not_equal(int1, int2, percent):# процент совпадения
-                    if int1 < int2:
-                        int1, int2 = int2, int1 #int1 >= int2
-                    return True if int1 * (percent / 100) > int2 else False
+            def not_equal(int1, int2, percent):# процент совпадения
+                if int1 < int2:
+                    int1, int2 = int2, int1 #int1 >= int2
+                return True if int1 * (percent / 100) > int2 else False
 
-                if not_equal(data[i]['gm']['lvl'], gm['lvl'], 95):
-                    index += 3
-                if not_equal(data[i]['gm']['def'], gm['def'], 90):
-                    index += 1
-                if not_equal(data[i]['gm']['atc'], gm['atc'], 85):
-                    index += 1
-                if not_equal(data[i]['gm']['exp'], gm['exp'], 90):
-                    index += 3
-                if not_equal(data[i]['gm']['stamina'], gm['stamina'], 90):
-                    index += 3
-                if not_equal(data[i]['gm']['petL'], gm['petL'], 90):
-                    index += 2
-                if not_equal(data[i]['gm']['bag'], gm['bag'], 50):
-                    index += 1
-                if index > 10:
-                    inter['msg'].append('index: ' + str(index) + '\nДля пользователя ' +
-                                        data[i]['gm']['nick'] + ' и присланного от него ' +
-                                        gm['nick'])
-                if index >= 15:
-                    if is_admin:
-                        inter['main'] = ('Скорее всего вы обновляете другого человека с ' +
-                                         'новым ником, такое недопустимо. Если же это ' +
-                                         'ваши данные, то они слишком сильно изменились '
-                                         'и внутренний индекс недоверия к ним составил ' +
-                                         str(index) + ' из 25 возможных (<15 для прохождения)')
-                    else:
-                        inter['main'] = ('Скорее всего вы прислали чужие данные. Или ' +
-                                         'ваши данные сильно изменились. Внутренний ' +
-                                         'индекс недоверия к ним составил ' + str(index) +
-                                         ' из 25 возможных (<15 для прохождения)')
-                    edit_main_send(inter)
-                    return False, False, inter
+            if not_equal(data[i]['gm']['lvl'], gm['lvl'], 95):
+                index += 3
+            if not_equal(data[i]['gm']['def'], gm['def'], 90):
+                index += 1
+            if not_equal(data[i]['gm']['atc'], gm['atc'], 85):
+                index += 1
+            if not_equal(data[i]['gm']['exp'], gm['exp'], 90):
+                index += 3
+            if not_equal(data[i]['gm']['stamina'], gm['stamina'], 100):
+                index += 3
+            if not_equal(data[i]['gm']['petL'], gm['petL'], 90):
+                index += 2
+            if not_equal(data[i]['gm']['bag'], gm['bag'], 50):
+                index += 1
+            if index > 10:
+                inter['msg'].append('index: ' + str(index) + '\nДля пользователя ' +
+                                    data[i]['gm']['nick'] + ' и присланного от него ' +
+                                    gm['nick'])
+            if index >= 15:
+                if is_admin:
+                    inter['main'] = ('Скорее всего вы обновляете другого человека с ' +
+                                     'новым ником, такие действия недопустимы. Если же это ' +
+                                     'ваши данные, то они слишком сильно изменились '
+                                     'и внутренний индекс недоверия к ним составил ' +
+                                     str(index) + ' из 25 возможных (<15 для прохождения)')
+                else:
+                    inter['main'] = ('Скорее всего вы прислали чужие данные. Или ' +
+                                     'ваши данные сильно изменились. Внутренний ' +
+                                     'индекс недоверия к ним составил ' + str(index) +
+                                     ' из 25 возможных (<15 для прохождения)')
+                edit_main_send(inter)
+                return False, False, inter
             if gm['exp'] < data[i]['gm']['exp']:
                 inter['main'] = 'Предоставлена устаревшая информация о ' + gm['nick']
                 edit_main_send(inter)
@@ -559,7 +569,7 @@ def parse_message(data, m, admins):
         edit_main_send(inter)
         return True, True, inter
 
-    inter['main'] = 'Пустой исход'
+    inter['main'] = 'err: получен пустой исход'
     edit_main_send(inter)
     return False, False, inter
 
@@ -589,10 +599,12 @@ def parse_heroism(alldata, m):
     while s.find(va, p, p + 100) != -1:
         ticks += 1
         if ticks > 150:
-            inter['msg'].append('hero error in ticks')
+            inter['msg'].append('hero error in ticks (' + str(ticks) + ')')
             break
         p = s.find(va, p, p + 100) + 2
         nick = s[p:s.find(', ' + emj, p, p + 30)]
+        if _is_warlord(nick, is_return_nick=False):
+            [_bad, nick] = _is_warlord(nick)
         p = s.find(', ' + emj, p, p + 30) + 3
         heroism = _toint(s[p:p + 10])
 
@@ -638,10 +650,7 @@ def data_index_for_key(data, obj):
     elif type(obj) == type(''):
         word = obj
     elif type(obj) == type([]):
-        word = ''
-        for x in obj:
-            word += x + ' '
-        word = word[:-1]
+        word = ' '.join(obj)
     else:
         return -1
     
@@ -655,26 +664,48 @@ def data_index_for_key(data, obj):
     return -1
 
 
-def show_find(data, key, ID, is_admin, start_with = 0):
-    """key - str по типу '[username/name/ID ]key_in_log_keys'
+def show_find(data, key, cmd, ID, is_admin):
+    """key - str по типу '[<start_after>] [<username/name/ID>] <w_key(ключ из лога)>'
+    или по типу '<start_after>' и в cmd есть команда
+    cmd - list аргументов ...
     ID - int ID вызвавшего команду пользователя
-    is_admin - bool является ли пользователь админом
-    start_with - int id лога, начиная с короторого ведется поиск записей
+    is_admin - bool является ли пользователь администратором
 
     return msg, infostr, args
     msg - str с нулевой длиной, если все хорошо, иначе текст ошибки
     infostr - str найденные по ключу записи
     args - list - аргумент для работы бота при вызове delfind, find_next
     """
-    if len(key.split()) != 1:
+    if len(key) == 0:
+        raise KeyErr('Добавьте к команде один из ключей: all, lvl, def, atc, ' +
+                     'class, nick, eqact, eqdef, eq.[spear, shield, helment, ' +
+                     'armor, glove, boot], возможен неполный набор ключа')
+    #1 вырезаю [<start_after>] из key
+    MAX_LOG_LEN = 3000# не слишком большое, чтобы не путалось с ID
+    start_after = 0
+    first = key.split()[0]
+    if first.isdigit():
+        if (int(first) <= MAX_LOG_LEN) and (int(first) >= 0):
+            start_after = int(first)
+            key = ' '.join(key.split()[1:])
+    
+    if len(key.split()) == 0:
+        if cmd[0] == 'find':
+            key = cmd[3]
+        else:
+            raise KeyErr('err: отсутствие ключа для поиска')
+
+    from_ID = ID
+    if len(key.split()) > 1:
         if not is_admin:
-            return 'bad key', '', []
-        ID = key.split()[:-1]
+            raise KeyErr('err: ключ для поиска должен состоять из одного слова '
+                         + '({})'.format(key))
+        ID = ' '.join(key.split()[:-1])# ID с int на str: это нормально
     
     cur_index = data_index_for_key(data, ID)
     if cur_index == -1:
-        return 'bad ID', '', []
-
+        raise KeyErr('err: по строке ({}) пользователь не распознан'.format(ID))
+    ID = data[cur_index]['ID']
 
     w_key = key.split()[-1]
     is_all = True if w_key == 'all' else False
@@ -684,7 +715,7 @@ def show_find(data, key, ID, is_admin, start_with = 0):
     for i in range(len(data[cur_index]['log'])):
         if is_all or (w_key == data[cur_index]['log'][i]['key'][0:len(w_key)]):
             correct_len += 1
-            if data[cur_index]['log'][i]['id'] >= start_with:
+            if correct_len > start_after:
                 if num_start == 0:
                     num_start = correct_len
                 if correct_len - num_start <= 49:
@@ -694,19 +725,21 @@ def show_find(data, key, ID, is_admin, start_with = 0):
                     
     if num_stop ==0:
         num_stop = correct_len
-    
-    if data[cur_index]['ID'] != ID:
+
+    if correct_len > 0 and start_after > 0 and num_start == 0:
+        raise KeyErr('err: записей с этого индекса не обнаружено')
+    # сама функция
+    if data[cur_index]['ID'] != from_ID:
         infostr = 'Пользователь {}.\n'.format(data[cur_index]['gm']['nick'])
     else:
         infostr = ''
-
-    if start_with > 0 and num_start == 0:
-        return 'и г н о р и р у ю', '', []
-    if correct_len == num_stop and correct_len > 0 and is_all and num_start == 1:
+    
+    if correct_len == num_stop and num_start == 1 and is_all:
         infostr += 'Все записи (' + str(correct_len) +'):'
     elif correct_len == 0:
         infostr += 'Для ключа ' + w_key + ' записи не найдены'
-    elif correct_len <= 50:
+        raise KeyErr(infostr)
+    elif correct_len <= 50 and start_after == 0:
         if (correct_len // 10 == 1) or (correct_len % 10 in range(5, 10)) or (
             correct_len % 10 == 0):
             ending = ['о', 'ей']  
@@ -717,11 +750,19 @@ def show_find(data, key, ID, is_admin, start_with = 0):
         infostr += ('Для ключа ' + w_key + ' найден{} ' + str(correct_len) +
                     ' запис{}:').format(ending[0], ending[1])
     elif is_all:
-        infostr += ('Показаны ' + str(num_start) +
-                    '-' + str(num_stop) + ' записи из ' + str(correct_len) + ':')
+        if num_stop - num_start == 0:
+            infostr += ('Показана ' + str(num_start) +
+                        '-я запись из ' + str(correct_len) + ':')
+        else:
+            infostr += ('Показаны ' + str(num_start) +
+                        '-' + str(num_stop) + ' записи из ' + str(correct_len) + ':')
     else:
-        infostr += ('Для ключа ' + w_key + ' показаны ' + str(num_start) +
-                    '-' + str(num_stop) + ' записи из ' + str(correct_len) + ':')
+        if num_stop - num_start == 0:
+            infostr += ('Для ключа ' + w_key + ' показана ' + str(num_start) +
+                        '-я запись из ' + str(correct_len) + ':')
+        else:
+            infostr += ('Для ключа ' + w_key + ' показаны ' + str(num_start) +
+                        '-' + str(num_stop) + ' записи из ' + str(correct_len) + ':')
         
     size = 1 if num_stop - num_start < 9 else 2
     num = num_start
@@ -739,8 +780,9 @@ def show_find(data, key, ID, is_admin, start_with = 0):
             else:
                 infostr += '\n' + temp
     if num_stop < correct_len:
-        infostr += '\nследующие записи /find_next' 
-    return '', infostr, ['find', data[cur_index]['ID'], cur_id, w_key, num_start]
+        infostr += '\nследующие записи /find_' + str(num_stop)
+    s_key = str(ID) + ' ' + w_key
+    return infostr, ['find', data[cur_index]['ID'], cur_id, s_key, num_start]
 
 
 def del_find(data, ID, cur_id, intlist, num_start):
@@ -748,7 +790,7 @@ def del_find(data, ID, cur_id, intlist, num_start):
     cur_id - list id высвеченных данных лога
     intList - list номеров, введенных пользователем
     
-    return is_change
+    return is_change, inter
     is_change - bool были ли осуществлены изменения
     """
     cur_index = data_index_for_key(data, ID)
@@ -763,4 +805,84 @@ def del_find(data, ID, cur_id, intlist, num_start):
             del data[cur_index]['log'][i]
 
 
-    return True if len(del_id) > 0 else False 
+    return True if len(del_id) > 0 else False
+
+
+def nbattle(cur_dt, adjust=0):
+    """Отсчитывает число битв от внутренней точки отсчета
+    cur_dt - текущая дата/дата текущего сообщения
+    adjust - регулировка для часового пояса [0..3]
+
+    return n
+    n - int число прошедших битв
+    """
+    zero = datetime.datetime(2019, 5, 9) + datetime.timedelta(hours=adjust)
+    n = int((cur_dt - zero).total_seconds()) // 14400
+    return n
+
+
+def update_battle_report(data, old_nbtl, adjust, curdate):
+    """Обновляет данные по героизму, если произошла битва
+    adjust - регулировка для часового пояса [0..3]
+
+    return is_change, nbtl
+    is_change - изменились ли данные
+    nbtl - обновленное число битв
+    """
+    new_nbtl = nbattle(curdate, adjust)
+    delta_battles = new_nbtl - old_nbtl
+    if delta_battles:
+        for i in range(len(data)):
+            for t in range(delta_battles):
+                data[i]['btl'].insert(0, '0')
+                data[i]['btl'].pop()
+        return True, new_nbtl
+    return False, new_nbtl
+
+def parse_battle_report(data, m, nbtl, adjust):
+    """m - объект сообщения от бота
+    adjust - регулировка для часового пояса [0..3]
+    
+    return: is_change, inter
+    inter - dict внутренние сообщения, должна включать msg
+    """
+    inter = {'msg': []}
+    va = '\U0001f1fb\U0001f1e6'
+    ATC = '\u2694\ufe0f'
+    #DEF = '\U0001f6e1'
+    if not m.text.startswith(va):
+        return False, inter
+
+    index = -1;
+    ID = m.from_user.id
+    for i in range(len(data)):
+        if data[i]['ID'] == ID:
+            index = i;
+            break
+    if index == -1:
+        inter['msg'].append('Получен репорт битвы от неизвестного ' +
+                             'пользователя; ID (' + str(ID) + ') text:' + m.text);
+        return False, inter
+    
+    if nbtl != nbattle(datetime.datetime.fromtimestamp(m.forward_date), adjust):
+        return False, inter
+
+    nick = m.text[2:m.text.find(ATC, 4, 30) - 1];
+    if nick != data[index]['gm']['nick']:
+        inter['msg'].append('Ники не совпали. Возможно был изменён? {' + nick +
+                             '} и ник под этим ID {' + data[index]['gm']['nick'] + '} ');
+        return False, inter
+
+    if (m.text.find('Опыт: ', 20) == -1):
+        return False, inter
+        
+    data[index]['btl'][0] = '1' # участвовал
+    return True, inter
+    
+        
+        
+    
+
+    
+    
+

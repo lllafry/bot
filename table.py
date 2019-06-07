@@ -9,11 +9,10 @@ for i in range(len(TBL_CHANGE)):
 LFT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0] # 1: выравнивание слева
 DET = LFT # 1: обрезка по размеру
 
-#DRAW = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-
-
 def sort(data):
     # обновление состояния групп
+    for i in range(len(data)):
+        data[i]['ad']['heroism'] = data[i]['btl'].count('1') * 3
     timeNow = datetime.now()
     for i in range(len(data)):
         timeData = datetime.strptime(data[i]['ad']['time'], '%d.%m.%Y')
@@ -69,11 +68,13 @@ def get_table_image(data):
             pL = str(data[i]['gm']['petL'])
         else:
             pL = ''
+        
         if data[i]['ad']['heroism'] > 0:
             her = str(data[i]['ad']['heroism'])
         else:
             her = ''
-        dat.append([deltD, str(i+1), data[i]['gm']['nick'],
+        plNick = 'Δ ' + data[i]['gm']['nick'] +' Δ' if data[i]['gm']['isWL'] else data[i]['gm']['nick']
+        dat.append([deltD, str(i+1), plNick,
                     str(data[i]['gm']['lvl']), df,
                     str(data[i]['gm']['atc']),
                     data[i]['gm']['plCl'][:3],
