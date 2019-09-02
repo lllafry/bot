@@ -7,12 +7,12 @@ def _toint(s):
     """Превращает максимальное число начальных символов строки в число
     Пример:
     21вуп34 -> 21, -31 e -> -31, e32 -> 0, 3.1 -> 3 """
-    isNegative = False
+    is_negative = False
     if len(s) > 1:
         if s[0] == '-' and s[1].isdigit():
-            isNegative = True
+            is_negative = True
     for i in range(len(s)+1):
-        if not(s[i:i+1].isdigit() or ((i == 0) and isNegative)):
+        if not(s[i:i+1].isdigit() or ((i == 0) and is_negative)):
             break
     if i > 0:
         return int(s[0:i])
@@ -562,9 +562,10 @@ def parse_message(data, m, is_admin):
             edit_main_send(inter)
             return is_data, is_table, inter
 
-    if not is_admin:
+    #if not is_admin:
+    if True:
         data.append({'ID': ID, 'gm': gm, 'ad': ad, 'iden': [gm['nick'], ad['username']],
-                     'log': []})
+                     'log': [], 'btl': ["0" for i in range(84)]})
         inter['main'] = '{} успешно добавлен в таблицу'.format(gm['nick'])
         edit_main_send(inter)
         return True, True, inter

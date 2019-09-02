@@ -85,6 +85,7 @@ def SEND_DATA(m_chat, m_type, m_data):
     else:
         bot.send_message(LOG_CHAT, 'err SEND_DATA: получен' +
                          ' неизвестный формат данных ' + m_type)
+    return
 
 def GET_DATA(m):
     """Собирает данные из сообщения
@@ -139,6 +140,7 @@ def send_to_log(somedata):
     else:
         SEND_DATA(LOG_CHAT, 'text', 'err send_to_log: формат (' +
                   str(type(somedata)) + ')')
+    return
 
 
 def append_arg_to_act(m, args):
@@ -146,6 +148,11 @@ def append_arg_to_act(m, args):
 
 
 def get_arg_from_act(m, remove=True):
+    """Возвращает arg[]
+    arg[] как минимум содержит один аргумент с пустой строкой или именем
+    действующей сложной функции;
+    если это имя действующей функции, то количество аргументов тоже
+    фиксировано и зависит от функции"""
     for i in range(len(act)):
         if (m.from_user.id == act[i][0]) and (m.chat.id == act[i][1]):
             result = act[i][2].copy()
@@ -153,6 +160,14 @@ def get_arg_from_act(m, remove=True):
                 del act[i]
             return result
     return ['']
+
+
+def clear_arg_from_act(m):
+    for i in range(len(act)):
+        if (m.from_user.id == act[i][0]) and (m.chat.id == act[i][1]):
+            del act[i]
+            return
+    return
 
 
 def in_act(m, remove=True):
@@ -173,6 +188,7 @@ def in_act(m, remove=True):
     is_find = False
     is_block = 0
     # поиск человека в users (т.е. он ранее отправлял сообщение боту)
+    # users = [[user_1], [user_2], ...] # user: [ID, time_last_msg, num_msg, time_ban
     for i in range(len(users)):
         if users[i][0] == m.from_user.id:
             is_find = True
@@ -205,48 +221,111 @@ def in_act(m, remove=True):
 ### при переходе к супергруппе ###
 @bot.message_handler(content_types=['migrate_to_chat_id'])
 def command_change_chat_id(m):
-    if m.chat.id not in chats:
+    if m.chat.id not in chats: # здесь старое id чата, он должен быть в списке
         return
-    chats.append(m.migrate_to_chat_id)
     chats.remove(m.chat.id)
+    chats.append(m.migrate_to_chat_id)
     save_chats(db, chats)
     SEND_DATA(m.migrate_to_chat_id, 'text', 'чат эмигрировал с ' +
               str(m.chat.id) + ' на ' + str(m.migrate_to_chat_id))
+    return
+
+
+
+### игнорирование пользователей не из списков и покидание плохих чатов ###
+###       +        вставка команды start, иначе было бы неудобно       ###
+def is_bad_boy(m):
+    # выход из других чатов
+    if m.chat.type != 'private':
+        if (m.chat.id not in chats) and leave_chats:
+            bot.leave_chat(m.chat.id)
+            return True
+    
+    num_msg_to_block = 12 if m.from_user.id in admins else 8
+    
+    is_find = False
+    #0 - всё хорошо
+    #1 - блокировка за флуд
+    #2 - блокировка неизвестного пользователя
+    is_block = 0
+    # поиск человека в users (т.е. он ранее отправлял сообщение боту в текущей сессии)
+    # users = [[user_1], [user_2], ...] # user: [ID, time_last_msg, num_msg, time_ban]
+    for i in range(len(users)):
+        if users[i][0] == m.from_user.id:
+            is_find = True
+            if m.date == users[i][1]:# в одну секунду с первым из серии (за 10 сек) сообщением
+                users[i][2] += 2
+            elif m.date - users[i][1] < 10:# менее 10 секунд: находимся в той же серии
+                users[i][2] += 1
+            else:# обнуление
+                users[i][1], users[i][2] = m.date, 0
+            if users[i][2] >= num_msg_to_block:# игнорирование текущего сообщения (но не отправка в 'бан')
+                is_block = 1
+            if users[i][2] > num_msg_to_block * 2:
+                users[i][3] = m.date
+            if users[i][3] != 0:# отправка в 'бан' на 3 минуты
+                if m.date - users[i][3] < 180:
+                    is_block = 1
+                else:
+                    users[i][3] = 0
+            break
+    if not is_find: # если пользователь в этой сессии не писал
+        if not any(x['ID'] == m.from_user.id for x in data): # и его нет в таблице
+            if (m.from_user.id != ME) and (m.from_user.id not in admins): # и он не админ или ME
+                is_block = 2 # блокируется
+        if not is_block: # читай "иначе"
+            users.append([m.from_user.id, m.date, 0, 0])
+    return is_block
+
+
+@bot.message_handler(commands=['start'])
+def command_start(m):
+    if  m.chat.type != 'private':
+        return
+    val = is_bad_boy(m);
+    if  val == 2:# неизвестный
+        SEND_DATA(m.chat.id, 'text', 'Обратитесь к администратору бота')
+    elif val == 0:# известный неблокированный
+        clear_arg_from_act(m)
+        SEND_DATA(m.chat.id, 'text_html', 'Пришлите форвард ответа CW1-бота ' +
+                  'на команду <code>/hero</code> или прочтите /help')
+    return
+
+@bot.message_handler(func=is_bad_boy)
+def kill_bad_boys(m):
+    return
 
 
 ### блок напрямую связанных с шаговыми действиями команд ###
 @bot.message_handler(commands=['break'])#command
 def command_break(m):
-    bad_user, is_block, cmd = in_act(m)
+    clear_arg_from_act(m)
+    return
 
 
 @bot.message_handler(commands=['cmd'])#command a k
 def command_cmd(m):
-    bad_user, is_block, cmd = in_act(m, False)
-    if bad_user or is_block:
-        return
-    if m.from_user.id not in admins:
-        return
+    cmd = get_arg_from_act(m, False)
     SEND_DATA(m.chat.id, 'text', str(cmd))
+    return
 
 
 @bot.message_handler(func=lambda x: get_arg_from_act(x, False)[0] == 'send',
                      content_types=SETCOMM)#command vip
 def send_message_vip(m):
-    bad_user, is_block, cmd = in_act(m)
+    cmd = get_arg_from_act(m)
     some_data = GET_DATA(m)
     try:
         SEND_DATA(cmd[1], some_data['type'], some_data['data'])
     except:
         SEND_DATA(m.chat.id, 'text', 'отправить сообщение не удалось')
+    return
 
 
 @bot.message_handler(func=lambda x: get_arg_from_act(x, False)[0] == 'setcomm',
                      content_types=SETCOMM)#command (a) k
 def work_act_add_data_for_setcomm(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user:
-        return
+    cmd = get_arg_from_act(m)
     is_was = False
 
     ID = str(m.from_user.id)
@@ -276,6 +355,7 @@ def work_act_add_data_for_setcomm(m):
             SEND_DATA(m.chat.id, 'text', 'Команда ' + cmd[1] +' успешно добавлена')
     else:
         append_arg_to_act(m, [cmd[0], cmd[1], cmd[2] - 1, cmd[3]])
+    return
 
 
 ### ловля и игнорирование команд с чужим юзернеймом ###
@@ -284,121 +364,97 @@ def is_another_bot(m):
         return False
     if not m.text[0] == r'/':
         return False
-    list_comm = m.text.split()[0].split('@')
-    if len(list_comm) < 2:
-        return False
-    if len(list_comm) > 2:# отброшу мутантов
+    list_comm = m.text.split()[0].split('@') # в первом слове разделяю на до @ и после
+    if len(list_comm) == 2 and list_comm[1].lower() != USERNAME and list_comm[1].lower().endswith('bot'):
         return True
-    if list_comm[1].lower() != USERNAME:
-        return True
+    return False
 
 
 @bot.message_handler(func=is_another_bot)
 def kill_bad_commands(m):
-    bad_user, is_block, cmd = in_act(m)
+    clear_arg_from_act(m)
     return
-
-
-### блок команд без аргументов ###
-@bot.message_handler(commands=['start'])#command
-def command_start(m):
-    bad_user, is_block, cmd = in_act(m)
-    if is_block:
-        return
-    if  m.chat.type != 'private':
-        return
-    if bad_user:
-        SEND_DATA(m.chat.id, 'text', 'Обратитесь к администратору бота')
-    else:
-        SEND_DATA(m.chat.id, 'text_html', 'Пришлите форвард ответа CW1-бота ' +
-                  'на команду <code>/hero</code> или прочтите /help')
 
 
 @bot.message_handler(commands=['help'])#command
 def command_help(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     msg = HELP
     if len(comms) > 0:
         msg += '\n\nдополнительные команды:\n'
         msg += ', '.join([x['comm'] for x in comms])
     SEND_DATA(m.chat.id, 'text_html', msg)
+    return
 
 
 @bot.message_handler(commands=['helpmore'])#command
 def command_helpmore(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     SEND_DATA(m.chat.id, 'text_html', HELPMORE)
+    return
 
 
 @bot.message_handler(commands=['admhelp'])#command
 def command_admhelp(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.from_user.id not in admins:
         return
     SEND_DATA(m.chat.id, 'text_html', ADMHELP)
+    return
 
 
 @bot.message_handler(commands=['admhelp2'])#command
 def command_admhelp2(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.from_user.id not in admins:
         return
     SEND_DATA(m.chat.id, 'text_html', ADMHELP2)
+    return
 
 
 @bot.message_handler(commands=['asuka'])#command
 def command_asuka(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.from_user.id in admins:
         SEND_DATA(m.chat.id, 'text', random.choice(ASUKA))
     else:
         SEND_DATA(m.chat.id, 'text', 'игнорирую')
+    return
 
 
 @bot.message_handler(commands=['chatid'])#command
 def command_chatid(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     SEND_DATA(m.chat.id, 'text', m.chat.id)
+    return
 
 
 @bot.message_handler(commands=['addchat'])#command a -l
 def command_addchat(m):
+    clear_arg_from_act(m)
     if (m.chat.type == 'private' or m.chat.id in chats or
         m.from_user.id not in admins):
         return
     chats.append(m.chat.id)
     save_chats(db, chats)
-    bad_user, is_block, cmd = in_act(m)
+    return
 
 
 @bot.message_handler(commands=['delchat'])#command a -l
 def command_delchat(m):
+    clear_arg_from_act(m)
     if (m.chat.type == 'private' or m.chat.id not in chats or
         m.from_user.id not in admins):
         return
     chats.remove(m.chat.id)
     save_chats(db, chats)
-    bad_user, is_block, cmd = in_act(m)
+    return
 
 
 @bot.message_handler(commands=['table'])#command
 def command_table(m):
+    clear_arg_from_act(m)
     global is_table, table_file_id
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
     is_change, nbtl = update_battle_report(data, btl[0], btl[1], datetime.now())
     if is_change:
         is_table = False
@@ -412,15 +468,12 @@ def command_table(m):
         table_file_id = bot.send_photo(
             m.chat.id, get_table_image(data)).json['photo'][-1]['file_id']
         is_table = True
+    return
 
 
 @bot.message_handler(commands=['data'])#command a
 def command_data(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
-    if m.from_user.id not in admins:
-        return
+    clear_arg_from_act(m)
     all_data = {}
     all_data['comms'] = comms
     all_data['admins'] = admins
@@ -432,6 +485,7 @@ def command_data(m):
             bfile.name = ('data ' + datetime.strftime(
                 datetime.now(), '%d %h %y') + '.txt')
             SEND_DATA(m.chat.id, 'document', bfile)
+    return
 
 
 ### блок команд с аргументами ###
@@ -467,6 +521,7 @@ def try_extract_ID(s):
 
 @bot.message_handler(func=lambda m: comm_name(m, 'send'))#command self vip
 def command_send(m):
+    clear_arg_from_act(m)
     if m.from_user.id != ME:
         return
     msg, chat_id = try_extract_ID(m.text)
@@ -476,13 +531,12 @@ def command_send(m):
     append_arg_to_act(m, ['send', chat_id])
     SEND_DATA(m.chat.id, 'text', 'следующее присланное сообщение будет ' +
               'отправлено на указанное id (отмена по /break)')
+    return
 
 
 @bot.message_handler(func=lambda m: comm_name(m, 'plot'))#command
 def command_plot(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     is_admin = True if m.from_user.id in admins else False
     try:
         plot_file_bytes = get_plot(data, extract_key(m.text),
@@ -495,13 +549,12 @@ def command_plot(m):
         send_to_log('err in plot (' + str(e) + ') with\n' + m.text)
         return
     SEND_DATA(m.chat.id, 'photo', plot_file_bytes)
+    return
 
 
 @bot.message_handler(func=lambda m: comm_name(m, 'activity'))#command a
 def command_activity(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     try:
         plot_file_bytes = get_activity(data, extract_key(m.text))
     except KeyErr as e:
@@ -512,26 +565,24 @@ def command_activity(m):
         send_to_log('err in activity (' + str(e) + ') with\n' + m.text)
         return
     SEND_DATA(m.chat.id, 'photo', plot_file_bytes)
+    return
 
 
 @bot.message_handler(func=lambda m: comm_name(m, 'adduser'))#command a
 def command_adduser(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     msg, ID = try_extract_ID(m.text)
     if len(msg) > 0:
         SEND_DATA(m.chat.id, 'text', msg)
         return
     users.append([ID, m.date, 0, 0])
-    SEND_DATA(m.chat.id, 'text', 'ok')
+    SEND_DATA(m.chat.id, 'text', 'Пользователь добавлен в временный белый список.')
+    return
     
 
 @bot.message_handler(func=lambda m: comm_name(m, 'admin'))#command a
 def command_admin(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if (m.from_user.id not in admins) and (m.from_user.id != ME):
         return
     key = extract_key(m.text)
@@ -551,16 +602,15 @@ def command_admin(m):
             admins.remove(ID)
             save_admins(db, admins)
             SEND_DATA(m.chat.id, 'text', 'ok')
+    return
 
 
 @bot.message_handler(func=lambda m: comm_name(m, 'find'))#command l k
 def command_find(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    cmd = get_arg_from_act(m)
     if m.chat.type != 'private':
         return
-    is_admin = True if m.from_user.id in admins else False
+    is_admin = m.from_user.id in admins
     try:
         infostr, args = show_find(data, extract_key(m.text),
                                   cmd, m.from_user.id, is_admin)
@@ -573,12 +623,12 @@ def command_find(m):
         return
     append_arg_to_act(m, args)
     SEND_DATA(m.chat.id, 'text_html', infostr)
+    return
+
 
 @bot.message_handler(commands=['delfind'])#command l k
 def command_delfind(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    cmd = get_arg_from_act(m)
     if m.chat.type != 'private':
         return
     if cmd[0] != 'find':
@@ -598,14 +648,13 @@ def command_delfind(m):
     if is_change:
         save_data(db, data)
         SEND_DATA(m.chat.id, 'text', 'done')
+    return
 
 
 @bot.message_handler(func=lambda m: comm_name(m, 'deluser'))#command a k
 def command_deluser(m):
     global is_table
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    cmd = get_arg_from_act(m)
     if m.from_user.id not in admins:
         return
     key = extract_key(m.text)
@@ -648,14 +697,13 @@ def command_deluser(m):
     append_arg_to_act(m, ['deluser', ID, nick])
     SEND_DATA(m.chat.id, 'text', 'Для удаления игрока {} {} {} нажмите /deluser'.format(
         nick, username, ID))
+    return
 
 
 @bot.message_handler(commands=['restoreuser'])#command a k
 def command_restoreuser(m):
     global is_table
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.from_user.id not in admins:
         return
     msg, ID = try_extract_ID(m.text)
@@ -671,13 +719,12 @@ def command_restoreuser(m):
     data.append(some_data)
     save_data(db, data)
     SEND_DATA(m.chat.id, 'text', some_data['gm']['nick'] + ' восстановлен')
+    return
 
 
 @bot.message_handler(func=lambda m: comm_name(m, 'setcomm'))#command a k
 def command_setcomm(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.from_user.id not in admins:
         return
     key = extract_key(m.text).lower()
@@ -716,13 +763,12 @@ def command_setcomm(m):
     ending = ['о', 'е'] if num == 1 else ['ы', 'я']
     SEND_DATA(m.chat.id, 'text', 'Хорошо, теперь пришлите выводим' +
               ending[0] + 'е  по команде ' + key + ' сообщени' + ending[1])
+    return
 
 
 @bot.message_handler(func=lambda m: comm_name(m, 'delcomm'))#command a
 def command_delcomm(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.from_user.id not in admins:
         return
     key = extract_key(m.text)
@@ -746,7 +792,8 @@ def command_delcomm(m):
             save_comms(db, comms)
             SEND_DATA(m.chat.id, 'text', 'Команда ' + key + ' успешно удалена')
             return
-    SEND_DATA(m.chat.id, 'text', 'Команды ' + key + ' нет в списке')   
+    SEND_DATA(m.chat.id, 'text', 'Команды ' + key + ' нет в списке')
+    return
 
 
 ### для команд из setcomm ###
@@ -763,9 +810,7 @@ def is_from_comm(m):
 
 @bot.message_handler(func=is_from_comm)
 def command_from_comm(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     command = extract_comm(m.text)
     for i in range(len(comms)):
         if command == comms[i]['comm']:
@@ -779,6 +824,7 @@ def command_from_comm(m):
                     SEND_DATA(m.chat.id, 'text',
                               'Данные по команде вероятно были потеряны')
             break
+    return
 
 
 ### блок использующих форварды команд ###
@@ -809,9 +855,7 @@ def forward_ID_find(m, text_to_find):
 @bot.message_handler(func=lambda m: forward_ID(m, r'/class') == 587303845)#from CW1
 def parse_forward_from_CW1(m):
     global is_table
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or (is_block > 10):
-        return
+    clear_arg_from_act(m)
     if m.chat.type != 'private':
         return
     is_admin = True if m.from_user.id in admins else False
@@ -822,30 +866,27 @@ def parse_forward_from_CW1(m):
         save_data(db, data)
     if is_change_table:
         is_table = False
+    return
 
 
-@bot.message_handler(func=lambda m: forward_ID(m, 'через отряд') == 279170062)#from kesha
-def parse_forward_with_heroism(m):
-    return # больше не действует
-    global is_table
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
-    is_change, inter = parse_heroism(data, m)
-    send_to_log(inter['msg'])
-    if is_change:
-        save_data(db, data)
-        is_table = False
-    if 'main' in inter.keys():
-       SEND_DATA(m.chat.id, 'text', inter['main'])
+#@bot.message_handler(func=lambda m: forward_ID(m, 'через отряд') == 279170062)#from kesha
+#def parse_forward_with_heroism(m):
+#    global is_table
+#    clear_arg_from_act(m)
+#    is_change, inter = parse_heroism(data, m)
+#    send_to_log(inter['msg'])
+#    if is_change:
+#        save_data(db, data)
+#        is_table = False
+#    if 'main' in inter.keys():
+#       SEND_DATA(m.chat.id, 'text', inter['main'])
+#    return
 
 
 @bot.message_handler(func=lambda m: forward_ID_find(m, 'Твои результаты в бою:') == 587303845)#battle report
 def parse_report_from_battle(m):
     global is_table
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
 
     is_change, nbtl = update_battle_report(data, btl[0], btl[1], datetime.now())
     if is_change:
@@ -862,23 +903,21 @@ def parse_report_from_battle(m):
         is_table = False
     if 'main' in inter.keys():
        SEND_DATA(m.chat.id, 'text', inter['main'])
+    return
 
 
 @bot.message_handler(func=lambda m: forward_ID(m, r'/stock') == 265204902)#from CW3
 def forward_from_CW3(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.chat.type != 'private':
         return
     SEND_DATA(m.chat.id, 'text', random.choice(TRY_CW3))
+    return
 
 
 @bot.message_handler(func=lambda m: forward_ID(m), content_types=SETCOMM)#from any
 def forward_from_any_user(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
     if m.chat.type != 'private':
         return
     if m.forward_from.is_bot:
@@ -888,14 +927,14 @@ def forward_from_any_user(m):
     bot.reply_to(m, 'Форвард от ' + from_who + ' @' + m.forward_from.username +
                  ' (' + str(m.forward_from.id) + ')\nВремя: ' +
                  str(time.ctime(m.forward_date + 3 * 3600)) + ' (+3)')
+    return
 
 
 ### команда - заглушка ###
 @bot.message_handler(content_types=SETCOMM)
 def some_data(m):
-    bad_user, is_block, cmd = in_act(m)
-    if bad_user or is_block:
-        return
+    clear_arg_from_act(m)
+    return
 
 
 ### основной цикл ###
